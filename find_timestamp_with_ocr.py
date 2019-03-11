@@ -5,7 +5,7 @@ except ImportError:
 import pytesseract
 
 import cv2
-print(cv2.__version__)
+#print(cv2.__version__)
 
 import re
 import datetime
@@ -53,59 +53,55 @@ def get_date_time_bboxes( image ):
 
     return (timestamp, rect)
 
+def extract_video_info( video_file_name ):
+    # open video
+    vidcap = cv2.VideoCapture(video_file_name)
+    if (not vidcap.isOpened()):
+        print("ERROR: failed to open video file")
+        exit(-2)
 
-argc = len(sys.argv)
-if (argc < 2):
-    print("ERROR: missing argument")
-    exit(-1)
-
-# open video
-video_file_name = sys.argv[1]
-vidcap = cv2.VideoCapture(video_file_name)
-if (not vidcap.isOpened()):
-    print("ERROR: failed to open video file")
-    exit(-2)
-
-frame_counter = 0
-success,image = vidcap.read()
-
-# find first date + time stamp
-try:
-    ocr_result = get_date_time_bboxes(image)
-except RuntimeError as err:
-    print(err.args)
-    exit(-4)
-
-ocr_bbox=ocr_result[1]
-timestamp=ocr_result[0]
-
-# for next frames crop only the timestamp area for OCR
-while success:
-    prev_timestamp=timestamp
-    frame_counter += 1
+    frame_counter = 0
     success,image = vidcap.read()
-    cropped_image = image[ocr_bbox[1]:ocr_bbox[3],ocr_bbox[0]:ocr_bbox[2]]
+
+    # find first date + time stamp
     try:
-        ocr_result = get_date_time_bboxes(cropped_image)
+        ocr_result = get_date_time_bboxes(image)
     except RuntimeError as err:
         print(err.args)
         exit(-4)
-    #ocr_result = get_date_time_bboxes(image)
-    timestamp = ocr_result[0]
-    # find first frame where timestamp changes
-    timediff = timestamp - prev_timestamp
-    if(datetime.timedelta(0) != timediff):
-        output = {}
-        output['FirstChangeAtFrame'] = str(frame_counter)
-        output['Time'] = str(timestamp.strftime("%H:%M:%S"))
-        output['Date'] = str(timestamp.strftime("%Y/%m/%d"))
-        output['BoundingBox'] = str(ocr_bbox)
-        json_output = json.dumps(output, sort_keys=True, indent=4, separators=(',', ': '))
-        print(json_output)
-        break
 
-    if (60<=frame_counter):
-        print("ERROR: no timestamp change in first 60 frames")
-        exit(-3)
+    ocr_bbox=ocr_result[1]
+    timestamp=ocr_result[0]
 
-exit(0)
+    # for next frames crop only the timestamp area for OCR
+    while success:
+        prev_timestamp=timestamp
+        frame_counter += 1
+        success,image = vidcap.read()
+        cropped_image = image[ocr_bbox[1]:ocr_bbox[3],ocr_bbox[0]:ocr_bbox[2]]
+        try:
+            ocr_result = get_date_time_bboxes(cropped_image)
+        except RuntimeError as err:
+            print(err.args)
+            exit(-4)
+        #ocr_result = get_date_time_bboxes(image)
+        timestamp = ocr_result[0]
+        # find first frame where timestamp changes
+        timediff = timestamp - prev_timestamp
+        if(datetime.timedelta(0) != timediff):
+            output = {}
+            output['FirstChangeAtFrame'] = str(frame_counter)
+            output['Time'] = str(timestamp.strftime("%H:%M:%S"))
+            output['Date'] = str(timestamp.strftime("%Y/%m/%d"))
+            output['BoundingBox'] = str(ocr_bbox)
+            output['FPS'] = str(vidcap.get(cv2.CAP_PROP_FPS))
+            output['TotalFrames'] = str(int(vidcap.get(cv2.CAP_PROP_FRAME_COUNT)))
+            #json_output = json.dumps(output, sort_keys=True, indent=4, separators=(',', ': '))
+            #print(json_output)
+            break
+
+        if (60<=frame_counter):
+            print("ERROR: no timestamp change in first 60 frames")
+            exit(-3)
+
+    return output
